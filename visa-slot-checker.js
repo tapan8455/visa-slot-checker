@@ -2,8 +2,8 @@ import axios from 'axios';
 import twilio from 'twilio';
 
 // ==== CONFIG ====
-const POLL_INTERVAL_MIN_MS = 60000;  // 1 min
-const POLL_INTERVAL_MAX_MS = 120000; // 2 min
+const BASE_INTERVAL_MS = 90000; // 1.5 minutes base
+const JITTER_MS = 30000;        // +/- 30 seconds jitter
 
 // ==== ENVIRONMENT VARIABLE CHECK ====
 if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
@@ -34,9 +34,15 @@ const HEADERS = {
   'sec-fetch-dest': 'empty',
   'sec-fetch-mode': 'cors',
   'sec-fetch-site': 'cross-site',
-  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-  'x-api-key': '9Z9OS3'
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15'
 };
+
+// List of API keys to rotate
+const API_KEYS = ['9Z9OS3', 'TLKV29'];
+function getRandomApiKey() {
+  const index = Math.floor(Math.random() * API_KEYS.length);
+  return API_KEYS[index];
+}
 
 // ==== FUNCTION TO SEND DEMO NOTIFICATION ====
 async function sendDemoNotification() {
@@ -56,7 +62,10 @@ async function sendDemoNotification() {
 // ==== FUNCTION TO CHECK SLOTS ====
 async function checkSlots() {
   try {
-    const res = await axios.get(API_URL, { headers: HEADERS });
+    // Use a random API key for this request
+    const headers = { ...HEADERS, 'x-api-key': getRandomApiKey() };
+
+    const res = await axios.get(API_URL, { headers });
 
     // Log full API response for debugging
     console.log("API Response:", JSON.stringify(res.data, null, 2));
@@ -78,7 +87,6 @@ async function checkSlots() {
 
       console.log(message);
 
-      // Send SMS via Twilio
       await client.messages.create({
         body: message,
         from: TWILIO_PHONE_NUMBER,
@@ -94,15 +102,16 @@ async function checkSlots() {
   }
 }
 
-// ==== RANDOMIZED POLLING ====
-function getRandomInterval(minMs = POLL_INTERVAL_MIN_MS, maxMs = POLL_INTERVAL_MAX_MS) {
-  return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+// ==== HUMAN-LIKE RANDOMIZED POLLING ====
+function getHumanLikeInterval() {
+  const jitter = Math.floor(Math.random() * (2 * JITTER_MS + 1)) - JITTER_MS;
+  return BASE_INTERVAL_MS + jitter;
 }
 
 async function startPolling() {
   while (true) {
     await checkSlots();
-    const interval = getRandomInterval();
+    const interval = getHumanLikeInterval();
     console.log(`Next check in ${Math.floor(interval / 1000)} seconds...`);
     await new Promise(resolve => setTimeout(resolve, interval));
   }
@@ -111,4 +120,4 @@ async function startPolling() {
 // ==== START SCRIPT ====
 console.log('Visa slot checker started...');
 await sendDemoNotification(); // Send demo SMS at startup
-startPolling(); // Start randomized polling
+startPolling(); // Start human-like randomized polling
