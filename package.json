@@ -1,6 +1,7 @@
 {
   "name": "visa-slot-checker",
   "version": "1.0.0",
+  "type": "module",
   "description": "Automated visa slot checker with SMS alerts",
   "main": "visa-slot-checker.js",
   "scripts": {
@@ -13,3 +14,4 @@
   "author": "",
   "license": "ISC"
 }
+
