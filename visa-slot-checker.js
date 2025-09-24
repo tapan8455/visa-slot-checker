@@ -2,7 +2,8 @@ import axios from 'axios';
 import twilio from 'twilio';
 
 // ==== CONFIG ====
-const POLL_INTERVAL_MS = 45 * 1000; // 45 Seconds
+const POLL_INTERVAL_MIN_MS = 60000;  // 1 min
+const POLL_INTERVAL_MAX_MS = 120000; // 2 min
 
 // ==== ENVIRONMENT VARIABLE CHECK ====
 if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
@@ -37,9 +38,6 @@ const HEADERS = {
   'x-api-key': '9Z9OS3'
 };
 
-// Keep track of locations already notified
-let notifiedLocations = new Set();
-
 // ==== FUNCTION TO SEND DEMO NOTIFICATION ====
 async function sendDemoNotification() {
   try {
@@ -59,7 +57,7 @@ async function sendDemoNotification() {
 async function checkSlots() {
   try {
     const res = await axios.get(API_URL, { headers: HEADERS });
-    
+
     // Log full API response for debugging
     console.log("API Response:", JSON.stringify(res.data, null, 2));
 
@@ -70,21 +68,12 @@ async function checkSlots() {
       return;
     }
 
-    // Filter locations with available slots
+    // Send SMS for all locations with slots
     const available = slots.filter(s => s.slots > 0);
-
     if (available.length > 0) {
-      // Filter out locations already notified
-      const newSlots = available.filter(s => !notifiedLocations.has(s.visa_location));
-      if (newSlots.length === 0) {
-        console.log('Slots available, but already notified.');
-        return;
-      }
-
       let message = '🎉 Visa slots available:\n';
-      newSlots.forEach(loc => {
+      available.forEach(loc => {
         message += `${loc.visa_location} - ${loc.slots} slots\n`;
-        notifiedLocations.add(loc.visa_location);
       });
 
       console.log(message);
@@ -99,13 +88,27 @@ async function checkSlots() {
     } else {
       console.log('No slots available at', new Date().toLocaleString());
     }
+
   } catch (err) {
     console.error('Error fetching slots:', err.message);
   }
 }
 
-// ==== START POLLING ====
+// ==== RANDOMIZED POLLING ====
+function getRandomInterval(minMs = POLL_INTERVAL_MIN_MS, maxMs = POLL_INTERVAL_MAX_MS) {
+  return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+}
+
+async function startPolling() {
+  while (true) {
+    await checkSlots();
+    const interval = getRandomInterval();
+    console.log(`Next check in ${Math.floor(interval / 1000)} seconds...`);
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+}
+
+// ==== START SCRIPT ====
 console.log('Visa slot checker started...');
-await sendDemoNotification(); // send demo SMS at startup
-checkSlots(); // immediate run
-setInterval(checkSlots, POLL_INTERVAL_MS);
+await sendDemoNotification(); // Send demo SMS at startup
+startPolling(); // Start randomized polling
