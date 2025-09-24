@@ -2,7 +2,7 @@ import axios from 'axios';
 import twilio from 'twilio';
 
 // ==== CONFIG ====
-const POLL_INTERVAL_MS = 6 * 1000; // 6 seconds
+const POLL_INTERVAL_MS = 30 * 1000; // 6 seconds
 
 // ==== ENVIRONMENT VARIABLE CHECK ====
 if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
@@ -93,3 +93,4 @@ async function checkSlots() {
 console.log('Visa slot checker started...');
 checkSlots(); // immediate run
 setInterval(checkSlots, POLL_INTERVAL_MS);
+
