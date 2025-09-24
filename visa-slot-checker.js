@@ -2,7 +2,14 @@ import axios from 'axios';
 import twilio from 'twilio';
 
 // ==== CONFIG ====
-const POLL_INTERVAL_MS = 60 * 1000; // 1 minute
+const POLL_INTERVAL_MS = 6 * 1000; // 6 seconds
+
+// ==== ENVIRONMENT VARIABLE CHECK ====
+if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
+    !process.env.TWILIO_PHONE_NUMBER || !process.env.MY_PHONE_NUMBER) {
+  console.error("Error: One or more Twilio environment variables are missing.");
+  process.exit(1);
+}
 
 // Twilio setup
 const client = twilio(
@@ -37,6 +44,10 @@ let notifiedLocations = new Set();
 async function checkSlots() {
   try {
     const res = await axios.get(API_URL, { headers: HEADERS });
+    
+    // Log full API response for debugging
+    console.log("API Response:", JSON.stringify(res.data, null, 2));
+
     const slots = res.data.slotDetails;
 
     if (!slots || slots.length === 0) {
@@ -50,7 +61,10 @@ async function checkSlots() {
     if (available.length > 0) {
       // Filter out locations already notified
       const newSlots = available.filter(s => !notifiedLocations.has(s.visa_location));
-      if (newSlots.length === 0) return;
+      if (newSlots.length === 0) {
+        console.log('Slots available, but already notified.');
+        return;
+      }
 
       let message = '🎉 Visa slots available:\n';
       newSlots.forEach(loc => {
@@ -66,6 +80,7 @@ async function checkSlots() {
         from: TWILIO_PHONE_NUMBER,
         to: MY_PHONE_NUMBER
       });
+      console.log("SMS sent successfully.");
     } else {
       console.log('No slots available at', new Date().toLocaleString());
     }
