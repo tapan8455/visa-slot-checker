@@ -2,7 +2,7 @@ import axios from 'axios';
 import twilio from 'twilio';
 
 // ==== CONFIG ====
-const POLL_INTERVAL_MS = 30 * 1000; // 6 seconds
+const POLL_INTERVAL_MS = 45 * 1000; // 45 Seconds
 
 // ==== ENVIRONMENT VARIABLE CHECK ====
 if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
@@ -39,6 +39,21 @@ const HEADERS = {
 
 // Keep track of locations already notified
 let notifiedLocations = new Set();
+
+// ==== FUNCTION TO SEND DEMO NOTIFICATION ====
+async function sendDemoNotification() {
+  try {
+    const message = '✅ Demo notification: Visa slot checker is running!';
+    await client.messages.create({
+      body: message,
+      from: TWILIO_PHONE_NUMBER,
+      to: MY_PHONE_NUMBER
+    });
+    console.log("Demo SMS sent successfully.");
+  } catch (err) {
+    console.error("Error sending demo SMS:", err.message);
+  }
+}
 
 // ==== FUNCTION TO CHECK SLOTS ====
 async function checkSlots() {
@@ -91,6 +106,6 @@ async function checkSlots() {
 
 // ==== START POLLING ====
 console.log('Visa slot checker started...');
+await sendDemoNotification(); // send demo SMS at startup
 checkSlots(); // immediate run
 setInterval(checkSlots, POLL_INTERVAL_MS);
-
