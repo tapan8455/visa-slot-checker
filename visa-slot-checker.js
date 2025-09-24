@@ -38,7 +38,7 @@ const HEADERS = {
 };
 
 // List of API keys to rotate
-const API_KEYS = ['9Z9OS3', 'TLKV29'];
+const API_KEYS = ['9Z9OS3', 'TLKV29','336SQI'];
 function getRandomApiKey() {
   const index = Math.floor(Math.random() * API_KEYS.length);
   return API_KEYS[index];
@@ -121,3 +121,4 @@ async function startPolling() {
 console.log('Visa slot checker started...');
 await sendDemoNotification(); // Send demo SMS at startup
 startPolling(); // Start human-like randomized polling
+
