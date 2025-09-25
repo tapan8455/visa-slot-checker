@@ -96,6 +96,22 @@ async function checkSlots() {
 }
 
 // ==== START POLLING ====
+
+// Send demo notification every time service starts
+async function sendStartupNotification() {
+  try {
+    const msg = await client.messages.create({
+      body: "✅ Visa slot checker service started and running.",
+      from: TWILIO_PHONE_NUMBER,
+      to: MY_PHONE_NUMBER,
+    });
+    console.log("Demo SMS sent:", msg.sid);
+  } catch (err) {
+    console.error("Failed to send startup SMS:", err.message);
+  }
+}
+
 console.log("Visa slot checker started...");
+sendStartupNotification(); // <--- demo notification
 checkSlots(); // run immediately
 setInterval(checkSlots, POLL_INTERVAL_MS);
