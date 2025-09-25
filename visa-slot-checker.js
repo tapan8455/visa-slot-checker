@@ -38,7 +38,7 @@ const HEADERS = {
 };
 
 // List of API keys to rotate
-const API_KEYS = ['9Z9OS3', 'TLKV29','336SQI'];
+const API_KEYS = ['TLKV29','336SQI'];
 function getRandomApiKey() {
   const index = Math.floor(Math.random() * API_KEYS.length);
   return API_KEYS[index];
