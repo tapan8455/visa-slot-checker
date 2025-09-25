@@ -1,18 +1,11 @@
-import axios from 'axios';
-import twilio from 'twilio';
+import axios from "axios";
+import twilio from "twilio";
 
 // ==== CONFIG ====
-const BASE_INTERVAL_MS = 90000; // 1.5 minutes base
-const JITTER_MS = 30000;        // +/- 30 seconds jitter
+const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const API_KEYS = ["9Z9OS3", "TLKV29","336SQI"];
+const FROZEN_KEYS = new Map(); // { apiKey: timestampUntilUnfrozen }
 
-// ==== ENVIRONMENT VARIABLE CHECK ====
-if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN ||
-    !process.env.TWILIO_PHONE_NUMBER || !process.env.MY_PHONE_NUMBER) {
-  console.error("Error: One or more Twilio environment variables are missing.");
-  process.exit(1);
-}
-
-// Twilio setup
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
@@ -21,67 +14,64 @@ const client = twilio(
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
 const MY_PHONE_NUMBER = process.env.MY_PHONE_NUMBER;
 
-// API CONFIG
-const API_URL = 'https://app.checkvisaslots.com/slots/v3';
-const HEADERS = {
-  'accept': '*/*',
-  'accept-language': 'en-US,en;q=0.9',
-  'cache-control': 'no-cache',
-  'extversion': '4.6.5.1',
-  'origin': 'chrome-extension://beepaenfejnphdgnkmccjcfiieihhogl',
-  'pragma': 'no-cache',
-  'priority': 'u=1, i',
-  'sec-fetch-dest': 'empty',
-  'sec-fetch-mode': 'cors',
-  'sec-fetch-site': 'cross-site',
-  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15'
+const API_URL = "https://app.checkvisaslots.com/slots/v3";
+const BASE_HEADERS = {
+  accept: "*/*",
+  "accept-language": "en-US,en;q=0.9",
+  "cache-control": "no-cache",
+  extversion: "4.6.5.1",
+  origin: "chrome-extension://beepaenfejnphdgnkmccjcfiieihhogl",
+  pragma: "no-cache",
+  priority: "u=1, i",
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "cross-site",
+  "user-agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
 };
 
-// List of API keys to rotate
-const API_KEYS = ['TLKV29','336SQI'];
-function getRandomApiKey() {
-  const index = Math.floor(Math.random() * API_KEYS.length);
-  return API_KEYS[index];
-}
-
-// ==== FUNCTION TO SEND DEMO NOTIFICATION ====
-async function sendDemoNotification() {
-  try {
-    const message = '✅ Demo notification: Visa slot checker is running!';
-    await client.messages.create({
-      body: message,
-      from: TWILIO_PHONE_NUMBER,
-      to: MY_PHONE_NUMBER
-    });
-    console.log("Demo SMS sent successfully.");
-  } catch (err) {
-    console.error("Error sending demo SMS:", err.message);
+// ==== PICK ACTIVE API KEY ====
+function getActiveApiKey() {
+  const now = Date.now();
+  for (const key of API_KEYS) {
+    if (!FROZEN_KEYS.has(key) || FROZEN_KEYS.get(key) < now) {
+      return key;
+    }
   }
+  return null; // no key available
 }
 
 // ==== FUNCTION TO CHECK SLOTS ====
 async function checkSlots() {
+  // Restrict time window: run only between 8 AM – 1 AM EST
+  const estNow = new Date().toLocaleString("en-US", {
+    timeZone: "America/New_York",
+  });
+  const estHour = new Date(estNow).getHours();
+  if (estHour >= 1 && estHour < 8) {
+    console.log("⏸ Paused: between 1 AM and 8 AM EST.");
+    return;
+  }
+
+  const apiKey = getActiveApiKey();
+  if (!apiKey) {
+    console.log("❌ No available API keys (all frozen). Skipping check.");
+    return;
+  }
+
   try {
-    // Use a random API key for this request
-    const headers = { ...HEADERS, 'x-api-key': getRandomApiKey() };
-
-    const res = await axios.get(API_URL, { headers });
-
-    // Log full API response for debugging
-    console.log("API Response:", JSON.stringify(res.data, null, 2));
+    const res = await axios.get(API_URL, {
+      headers: { ...BASE_HEADERS, "x-api-key": apiKey },
+    });
 
     const slots = res.data.slotDetails;
+    console.log("Full API response:", JSON.stringify(res.data, null, 2));
 
-    if (!slots || slots.length === 0) {
-      console.log('No slots found at', new Date().toLocaleString());
-      return;
-    }
+    const available = slots.filter((s) => s.slots > 0);
 
-    // Send SMS for all locations with slots
-    const available = slots.filter(s => s.slots > 0);
     if (available.length > 0) {
-      let message = '🎉 Visa slots available:\n';
-      available.forEach(loc => {
+      let message = "🎉 Visa slots available:\n";
+      available.forEach((loc) => {
         message += `${loc.visa_location} - ${loc.slots} slots\n`;
       });
 
@@ -90,35 +80,22 @@ async function checkSlots() {
       await client.messages.create({
         body: message,
         from: TWILIO_PHONE_NUMBER,
-        to: MY_PHONE_NUMBER
+        to: MY_PHONE_NUMBER,
       });
-      console.log("SMS sent successfully.");
     } else {
-      console.log('No slots available at', new Date().toLocaleString());
+      console.log("No slots available at", new Date().toLocaleString());
     }
-
   } catch (err) {
-    console.error('Error fetching slots:', err.message);
+    if (err.response?.status === 429) {
+      console.error(`⚠️ 429: Freezing API key ${apiKey} for 3 hours.`);
+      FROZEN_KEYS.set(apiKey, Date.now() + 3 * 60 * 60 * 1000);
+    } else {
+      console.error("Error fetching slots:", err.message);
+    }
   }
 }
 
-// ==== HUMAN-LIKE RANDOMIZED POLLING ====
-function getHumanLikeInterval() {
-  const jitter = Math.floor(Math.random() * (2 * JITTER_MS + 1)) - JITTER_MS;
-  return BASE_INTERVAL_MS + jitter;
-}
-
-async function startPolling() {
-  while (true) {
-    await checkSlots();
-    const interval = getHumanLikeInterval();
-    console.log(`Next check in ${Math.floor(interval / 1000)} seconds...`);
-    await new Promise(resolve => setTimeout(resolve, interval));
-  }
-}
-
-// ==== START SCRIPT ====
-console.log('Visa slot checker started...');
-await sendDemoNotification(); // Send demo SMS at startup
-startPolling(); // Start human-like randomized polling
-
+// ==== START POLLING ====
+console.log("Visa slot checker started...");
+checkSlots(); // run immediately
+setInterval(checkSlots, POLL_INTERVAL_MS);
