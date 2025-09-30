@@ -3,7 +3,7 @@ import twilio from "twilio";
 
 // ==== CONFIG ====
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const API_KEYS = ["9Z9OS3", "TLKV29","336SQI"];
+const API_KEYS = ["9Z9OS3", "TLKV29", "336SQI"];
 const FROZEN_KEYS = new Map(); // { apiKey: timestampUntilUnfrozen }
 
 const client = twilio(
@@ -64,15 +64,24 @@ async function checkSlots() {
       headers: { ...BASE_HEADERS, "x-api-key": apiKey },
     });
 
-    const slots = res.data.slotDetails;
+    const slots = res.data.slotDetails || [];
     console.log("Full API response:", JSON.stringify(res.data, null, 2));
 
-    const available = slots.filter((s) => s.slots > 0);
+    // Filter only Toronto slots and start date before March 2026
+    const march2026 = new Date("2026-03-01");
+    const filtered = slots.filter((s) => {
+      const locationMatch =
+        s.visa_location && s.visa_location.toLowerCase().includes("toronto");
+      const hasSlots = s.slots > 0;
+      const startDate = s.start_date ? new Date(s.start_date) : null;
+      const dateValid = startDate && startDate < march2026;
+      return locationMatch && hasSlots && dateValid;
+    });
 
-    if (available.length > 0) {
-      let message = "🎉 Visa slots available:\n";
-      available.forEach((loc) => {
-        message += `${loc.visa_location} - ${loc.slots} slots\n`;
+    if (filtered.length > 0) {
+      let message = "🎉 Visa slots available (Toronto < Mar 2026):\n";
+      filtered.forEach((loc) => {
+        message += `${loc.visa_location} - ${loc.slots} slots - ${loc.start_date}\n`;
       });
 
       console.log(message);
@@ -83,7 +92,7 @@ async function checkSlots() {
         to: MY_PHONE_NUMBER,
       });
     } else {
-      console.log("No slots available at", new Date().toLocaleString());
+      console.log("No matching Toronto slots found at", new Date().toLocaleString());
     }
   } catch (err) {
     if (err.response?.status === 429) {
@@ -101,7 +110,7 @@ async function checkSlots() {
 async function sendStartupNotification() {
   try {
     const msg = await client.messages.create({
-      body: "✅ Visa slot checker service started and running.",
+      body: "✅ Visa slot checker service started and running (Toronto filter active).",
       from: TWILIO_PHONE_NUMBER,
       to: MY_PHONE_NUMBER,
     });
